@@ -51,7 +51,8 @@ app.get("/extract", (req, res) => {
 // funciona sendo buscado por este servidor — por isso o Cloudflare Worker chama
 // essa rota em vez de tentar buscar o link do TikTok sozinho).
 app.get("/download", (req, res) => {
-  if (!API_KEY || req.get("x-api-key") !== API_KEY) {
+  const chaveOk = req.get("x-api-key") === API_KEY || req.query.key === API_KEY;
+  if (!API_KEY || !chaveOk) {
     return res.status(401).end("Não autorizado");
   }
 
