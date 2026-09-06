@@ -70,50 +70,53 @@ app.get("/download", (req, res) => {
   ]);
 
   let respondeuHeader = false;
-  let terminado = false;
+  let finalizado = false;
 
-  // Se depois de 25s nada aconteceu (nem um byte, nem erro), mata o processo
-  // e responde com erro em vez de deixar o navegador girando pra sempre.
+  // Só cancela se depois de 40s NADA tiver começado a chegar ainda.
+  // Se já começou a mandar dados, deixa terminar sozinho — o --socket-timeout
+  // do próprio yt-dlp cuida de travamentos de rede a partir daí.
   const timeoutGeral = setTimeout(() => {
-    if (!terminado) {
-      terminado = true;
+    if (!finalizado && !respondeuHeader) {
+      finalizado = true;
       proc.kill("SIGKILL");
-      if (!res.headersSent) {
-        res.status(504).end("Demorou demais pra baixar esse vídeo, tenta de novo");
-      } else {
-        res.end();
-      }
+      res.status(504).end("Demorou demais pra baixar esse vídeo, tenta de novo");
     }
-  }, 25000);
+  }, 40000);
 
-  proc.stdout.once("data", (chunk) => {
+  proc.stdout.on("data", (chunk) => {
     if (!respondeuHeader) {
       respondeuHeader = true;
+      clearTimeout(timeoutGeral);
       res.status(200);
       res.setHeader("Content-Type", "video/mp4");
       res.setHeader("Content-Disposition", 'attachment; filename="tiktok-video.mp4"');
     }
     res.write(chunk);
   });
-  proc.stdout.on("data", (chunk) => res.write(chunk));
+
   proc.stdout.on("end", () => {
-    terminado = true;
-    clearTimeout(timeoutGeral);
+    finalizado = true;
     res.end();
   });
 
   proc.stderr.on("data", () => {}); // só pra não travar o processo com o buffer cheio
 
   proc.on("error", () => {
-    terminado = true;
-    clearTimeout(timeoutGeral);
-    if (!res.headersSent) res.status(502).end("Erro ao iniciar o download");
+    if (!finalizado) {
+      finalizado = true;
+      clearTimeout(timeoutGeral);
+      if (!res.headersSent) res.status(502).end("Erro ao iniciar o download");
+    }
   });
   proc.on("close", (code) => {
-    terminado = true;
-    clearTimeout(timeoutGeral);
-    if (code !== 0 && !respondeuHeader) {
-      res.status(422).end("yt-dlp não conseguiu baixar esse vídeo");
+    if (!finalizado) {
+      finalizado = true;
+      clearTimeout(timeoutGeral);
+      if (code !== 0 && !respondeuHeader) {
+        res.status(422).end("yt-dlp não conseguiu baixar esse vídeo");
+      } else if (!res.writableEnded) {
+        res.end();
+      }
     }
   });
 });
