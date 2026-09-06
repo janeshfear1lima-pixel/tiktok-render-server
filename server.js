@@ -25,13 +25,16 @@ app.get("/extract", (req, res) => {
   // --no-playlist: garante que baixa só o vídeo desse link, não a conta inteira
   execFile(
     "yt-dlp",
-    ["-g", "--no-warnings", "--no-playlist", tiktokUrl],
-    { timeout: 20000, maxBuffer: 1024 * 1024 },
+    ["-g", "--no-warnings", "--no-playlist", "--socket-timeout", "20", tiktokUrl],
+    { timeout: 35000, maxBuffer: 1024 * 1024 },
     (err, stdout, stderr) => {
       if (err) {
+        const motivo = err.killed
+          ? "demorou demais e foi cancelado"
+          : (stderr || err.message || "erro desconhecido").toString().slice(0, 500);
         return res.status(422).json({
           error: "yt-dlp não conseguiu extrair esse vídeo",
-          detalhe: (stderr || err.message || "").toString().slice(0, 500),
+          detalhe: motivo,
         });
       }
 
